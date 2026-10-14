@@ -8,10 +8,13 @@ const DEFAULT_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vRZhG16c6gNzf_76m8fnRuDOnFbYdnDDvr-9PnoEiQOVQLL30TvE44RYisrBVXTUeuZFXvD6Mtqt7ht/pub?output=csv";
 
 module.exports = async function handler(req, res) {
-  const url = process.env.SHEET_CSV_URL || DEFAULT_CSV_URL;
+  const base = process.env.SHEET_CSV_URL || DEFAULT_CSV_URL;
+  // ?fresh=… lo envía el botón "Actualizar": salta el caché de Vercel y el de Google.
+  const fresh = !!(req.query && req.query.fresh);
+  const url = fresh ? `${base}${base.includes("?") ? "&" : "?"}_=${Date.now()}` : base;
 
   try {
-    const upstream = await fetch(url, { redirect: "follow" });
+    const upstream = await fetch(url, { redirect: "follow", cache: "no-store" });
     if (!upstream.ok) {
       throw new Error(`Google Sheets respondió ${upstream.status}`);
     }
@@ -23,8 +26,8 @@ module.exports = async function handler(req, res) {
     }
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    // 10 min de caché fresca; hasta 1 h sirviendo la versión anterior mientras se refresca.
-    res.setHeader("Cache-Control", "public, s-maxage=600, stale-while-revalidate=3600");
+    // Visitas normales: 1 min de caché (hasta 5 min mientras se refresca). Botón "Actualizar": sin caché.
+    res.setHeader("Cache-Control", fresh ? "no-store" : "public, s-maxage=60, stale-while-revalidate=300");
     res.setHeader("X-Fetched-At", new Date().toISOString());
     res.status(200).send(csv);
   } catch (err) {
