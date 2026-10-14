@@ -1,0 +1,1176 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard de Ventas</title>
+  <meta name="description" content="Dashboard comercial de ventas por región, producto y vendedor, alimentado desde Google Sheets." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet" />
+  <style>
+/* ---------- Tokens ---------- */
+:root {
+  color-scheme: light;
+  --page: #f3f2ee;
+  --surface-1: #fcfcfb;
+  --surface-2: #f0efec;
+  --border: #e3e2dd;
+  --grid: #e9e8e4;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #77766f;
+  --series-1: #2a78d6;
+  --series-1-soft: #cde2fb;
+  --accent-hover: #256abf;
+  --good: #0ca30c;
+  --good-text: #006300;
+  --critical: #d03b3b;
+  --critical-text: #b42f2f;
+  --warning: #fab219;
+  --warning-bg: #fff6e0;
+  --warning-border: #f2d38a;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 1px rgb(0 0 0 / 0.03);
+  --radius: 12px;
+  --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #121211;
+    --surface-1: #1a1a19;
+    --surface-2: #242423;
+    --border: #2f2f2d;
+    --grid: #2a2a28;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #9a998f;
+    --series-1: #3987e5;
+    --series-1-soft: #1c3a5e;
+    --accent-hover: #5598e7;
+    --good-text: #4cc24c;
+    --critical-text: #ec7b7b;
+    --warning-bg: #2c2512;
+    --warning-border: #5e4a17;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #121211;
+  --surface-1: #1a1a19;
+  --surface-2: #242423;
+  --border: #2f2f2d;
+  --grid: #2a2a28;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #9a998f;
+  --series-1: #3987e5;
+  --series-1-soft: #1c3a5e;
+  --accent-hover: #5598e7;
+  --good-text: #4cc24c;
+  --critical-text: #ec7b7b;
+  --warning-bg: #2c2512;
+  --warning-border: #5e4a17;
+  --shadow: none;
+}
+
+/* ---------- Base ---------- */
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--page);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+.page { max-width: 1240px; margin: 0 auto; padding: 28px 24px 40px; }
+h1, h2 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+h1 { font-size: 26px; }
+h2 { font-size: 15px; }
+.num, .tnum { font-variant-numeric: tabular-nums; }
+
+/* ---------- Header ---------- */
+.top { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 20px; }
+.eyebrow { margin: 0 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--series-1); }
+.meta { margin: 6px 0 0; color: var(--text-secondary); font-size: 13px; }
+.top-actions { display: flex; gap: 8px; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 36px; padding: 0 14px;
+  background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 8px;
+  font: 500 13px var(--font); cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.btn:hover { border-color: var(--text-muted); }
+.btn:focus-visible, select:focus-visible, input:focus-visible, .link-btn:focus-visible, th[data-sort]:focus-visible {
+  outline: 2px solid var(--series-1); outline-offset: 2px;
+}
+.btn svg { width: 16px; height: 16px; }
+.btn-icon { width: 36px; padding: 0; justify-content: center; }
+.btn-sm { height: 32px; padding: 0 12px; }
+.btn.is-loading svg { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Filters ---------- */
+.filters {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px;
+  padding: 14px 16px; margin-bottom: 16px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 150px; }
+.field span { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.field select, .field input, .table-tools input {
+  height: 36px; padding: 0 10px;
+  background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 8px;
+  font: 400 13px var(--font);
+}
+.field-date { min-width: 140px; }
+.check { display: inline-flex; align-items: center; gap: 8px; height: 36px; margin-left: auto; color: var(--text-secondary); font-size: 13px; cursor: pointer; }
+.check input { width: 16px; height: 16px; accent-color: var(--series-1); }
+
+/* ---------- Notices ---------- */
+.notice, .error {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 12px 14px; margin-bottom: 16px; border-radius: 10px; font-size: 13px;
+}
+.notice { background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--text-primary); }
+.notice svg, .error svg { flex: none; width: 18px; height: 18px; margin-top: 1px; }
+.notice .link-btn { padding: 0; height: auto; }
+.error { background: var(--surface-1); border: 1px solid var(--critical); color: var(--text-primary); }
+.error svg { color: var(--critical); }
+
+/* ---------- KPIs ---------- */
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kpi {
+  padding: 16px 18px; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+  min-width: 0;
+}
+.kpi-label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.kpi-value { margin-top: 6px; font-size: 26px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi-foot { margin-top: 6px; font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.delta { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.delta svg { width: 12px; height: 12px; }
+.delta.up { color: var(--good-text); }
+.delta.down { color: var(--critical-text); }
+.delta.flat { color: var(--text-secondary); }
+
+/* ---------- Cards ---------- */
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.card {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 18px 18px 16px; min-width: 0;
+}
+.card-wide { grid-column: 1 / -1; }
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.card-sub { margin: 3px 0 0; font-size: 12px; color: var(--text-muted); }
+.link-btn {
+  background: none; border: 0; padding: 4px 0; cursor: pointer;
+  color: var(--series-1); font: 500 12px var(--font); white-space: nowrap;
+}
+.link-btn:hover { color: var(--accent-hover); text-decoration: underline; }
+.chart { position: relative; min-height: 120px; }
+.empty { padding: 36px 0; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+/* Vertical bars (SVG) */
+.vbar-svg { display: block; width: 100%; overflow: visible; }
+.vbar-svg .gridline { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+.vbar-svg .baseline { stroke: var(--text-muted); stroke-width: 1; shape-rendering: crispEdges; }
+.vbar-svg .tick { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.vbar-svg .bar { fill: var(--series-1); transition: opacity .12s; }
+.vbar-svg .bar-label { fill: var(--text-secondary); font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.vbar-svg .hit { fill: transparent; cursor: default; }
+.vbar-svg .hit-band { fill: var(--surface-2); opacity: 0; }
+.vbar-svg g.col:hover .hit-band { opacity: 1; }
+.vbar-svg.has-hover .bar { opacity: .45; }
+.vbar-svg.has-hover g.col:hover .bar { opacity: 1; }
+
+/* Horizontal bars (HTML) */
+.hbars { display: flex; flex-direction: column; gap: 2px; }
+.hbar-row {
+  display: grid; grid-template-columns: minmax(84px, 150px) minmax(0, 1fr) auto;
+  align-items: center; gap: 12px; padding: 5px 6px; border-radius: 6px;
+}
+.hbar-row:hover { background: var(--surface-2); }
+.hbar-name { font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hbar-rank { color: var(--text-muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.hbar-track { height: 14px; position: relative; }
+.hbar-fill { height: 100%; min-width: 2px; background: var(--series-1); border-radius: 0 4px 4px 0; }
+.hbar-val { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.hbar-val b { color: var(--text-primary); font-weight: 600; margin-right: 6px; }
+
+/* ---------- Tables ---------- */
+.table-tools { display: flex; gap: 8px; align-items: center; }
+.table-tools input { width: 220px; }
+.table-wrap { overflow-x: auto; }
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data th, table.data td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+table.data th { font-size: 12px; font-weight: 500; color: var(--text-secondary); position: sticky; top: 0; background: var(--surface-1); }
+table.data th[data-sort] { cursor: pointer; user-select: none; }
+table.data th[data-sort]:hover { color: var(--text-primary); }
+table.data th[aria-sort="ascending"]::after { content: " ↑"; }
+table.data th[aria-sort="descending"]::after { content: " ↓"; }
+table.data .num { text-align: right; font-variant-numeric: tabular-nums; }
+table.data tr.is-flagged td { color: var(--text-muted); }
+table.data tr.is-flagged td.num { text-decoration: line-through; text-decoration-color: var(--text-muted); }
+table.data tfoot td { font-weight: 600; border-bottom: 0; }
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500;
+  background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--text-primary);
+}
+.badge svg { width: 11px; height: 11px; }
+.badge-ok { background: transparent; border-color: transparent; color: var(--text-muted); padding-left: 0; }
+.more { display: block; margin: 12px auto 0; }
+
+/* ---------- Tooltip ---------- */
+.tooltip {
+  position: fixed; z-index: 50; pointer-events: none;
+  min-width: 140px; padding: 9px 11px;
+  background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+  font-size: 12px;
+}
+.tooltip .tt-title { font-weight: 600; margin-bottom: 4px; }
+.tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; color: var(--text-secondary); }
+.tooltip .tt-row b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- Footer ---------- */
+.foot { margin-top: 20px; font-size: 12px; color: var(--text-muted); }
+
+/* ---------- Loading skeleton ---------- */
+.skeleton { height: 220px; border-radius: 8px; background: linear-gradient(90deg, var(--surface-2), var(--grid), var(--surface-2)); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 980px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .page { padding: 20px 16px 32px; }
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .top { flex-direction: column; align-items: flex-start; }
+  .filters { gap: 10px; }
+  .field { min-width: 0; flex: 1 1 calc(50% - 10px); }
+  .check { margin-left: 0; flex-basis: 100%; }
+  .card-head { flex-wrap: wrap; }
+  .table-tools { width: 100%; }
+  .table-tools input { flex: 1; width: auto; min-width: 0; }
+  h1 { font-size: 22px; }
+  .kpi-value { font-size: 22px; }
+  .hbar-row { grid-template-columns: minmax(70px, 110px) minmax(0, 1fr) auto; gap: 8px; }
+}
+@media (max-width: 420px) {
+  .kpi { padding: 14px; }
+  .kpi-value { font-size: 20px; }
+  .hbar-val .share { display: none; }
+}
+@media (max-width: 340px) {
+  .kpis { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232a78d6'/><rect x='7' y='16' width='4' height='9' rx='1.5' fill='white'/><rect x='14' y='10' width='4' height='15' rx='1.5' fill='white'/><rect x='21' y='6' width='4' height='19' rx='1.5' fill='white'/></svg>" />
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <div>
+        <p class="eyebrow">Gerencia Comercial</p>
+        <h1>Dashboard de Ventas</h1>
+        <p class="meta" id="meta">Cargando datos…</p>
+      </div>
+      <div class="top-actions">
+        <button class="btn" id="btn-refresh" type="button" title="Volver a leer la hoja">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10a6 6 0 1 1-1.8-4.3M16 4v3.5h-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Actualizar
+        </button>
+        <button class="btn btn-icon" id="btn-theme" type="button" aria-label="Cambiar tema claro/oscuro" title="Tema claro/oscuro">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3a7 7 0 1 0 7 7 5.5 5.5 0 0 1-7-7Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="filters" aria-label="Filtros">
+      <label class="field">
+        <span>Período</span>
+        <select id="f-periodo">
+          <option value="ytd">Año en curso</option>
+          <option value="mes">Mes en curso</option>
+          <option value="90d">Últimos 90 días</option>
+          <option value="todo">Todo el histórico</option>
+          <option value="custom">Personalizado…</option>
+        </select>
+      </label>
+      <label class="field field-date" id="wrap-desde" hidden>
+        <span>Desde</span>
+        <input type="date" id="f-desde" />
+      </label>
+      <label class="field field-date" id="wrap-hasta" hidden>
+        <span>Hasta</span>
+        <input type="date" id="f-hasta" />
+      </label>
+      <label class="field">
+        <span>Región</span>
+        <select id="f-region"><option value="">Todas</option></select>
+      </label>
+      <label class="field">
+        <span>Producto</span>
+        <select id="f-producto"><option value="">Todos</option></select>
+      </label>
+      <label class="check">
+        <input type="checkbox" id="f-observados" />
+        <span>Incluir registros observados</span>
+      </label>
+    </section>
+
+    <div class="notice" id="notice" hidden></div>
+    <div class="error" id="error" role="alert" hidden></div>
+
+    <section class="kpis" id="kpis" aria-label="Indicadores clave"></section>
+
+    <section class="grid">
+      <article class="card card-wide">
+        <header class="card-head">
+          <div>
+            <h2>Ventas por mes</h2>
+            <p class="card-sub" id="sub-mes"></p>
+          </div>
+          <button class="link-btn" data-toggle-table="mes" type="button">Ver tabla</button>
+        </header>
+        <div class="chart" id="chart-mes"></div>
+      </article>
+
+      <article class="card">
+        <header class="card-head">
+          <div>
+            <h2>Ventas por región</h2>
+            <p class="card-sub">Monto y participación del período</p>
+          </div>
+          <button class="link-btn" data-toggle-table="region" type="button">Ver tabla</button>
+        </header>
+        <div class="chart" id="chart-region"></div>
+      </article>
+
+      <article class="card">
+        <header class="card-head">
+          <div>
+            <h2>Ventas por producto</h2>
+            <p class="card-sub">Monto y participación del período</p>
+          </div>
+          <button class="link-btn" data-toggle-table="producto" type="button">Ver tabla</button>
+        </header>
+        <div class="chart" id="chart-producto"></div>
+      </article>
+
+      <article class="card card-wide">
+        <header class="card-head">
+          <div>
+            <h2>Ranking de vendedores</h2>
+            <p class="card-sub" id="sub-vendedores">Top 10 por monto vendido</p>
+          </div>
+          <button class="link-btn" data-toggle-table="vendedor" type="button">Ver tabla</button>
+        </header>
+        <div class="chart" id="chart-vendedor"></div>
+      </article>
+
+      <article class="card card-wide" id="detalle">
+        <header class="card-head">
+          <div>
+            <h2>Detalle de transacciones</h2>
+            <p class="card-sub" id="sub-detalle"></p>
+          </div>
+          <div class="table-tools">
+            <input type="search" id="f-buscar" placeholder="Buscar vendedor, producto…" aria-label="Buscar en el detalle" />
+            <button class="btn btn-sm" id="btn-csv" type="button">Descargar CSV</button>
+          </div>
+        </header>
+        <div class="table-wrap">
+          <table class="data" id="tabla-detalle">
+            <thead>
+              <tr>
+                <th data-sort="fecha" aria-sort="descending">Fecha</th>
+                <th data-sort="vendedor">Vendedor</th>
+                <th data-sort="producto">Producto</th>
+                <th data-sort="region">Región</th>
+                <th data-sort="monto" class="num">Monto</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <button class="link-btn more" id="btn-mas" type="button" hidden>Mostrar más</button>
+      </article>
+    </section>
+
+    <footer class="foot">
+      Fuente: Google Sheets (hoja publicada). Las cifras excluyen por defecto los registros observados: montos mayores a 5 veces la mediana de su producto y fechas posteriores a hoy.
+    </footer>
+  </div>
+
+  <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+
+  <script>
+(() => {
+  "use strict";
+
+  /* =========================================================
+     CONFIGURACIÓN — lo único que normalmente hay que tocar
+     ========================================================= */
+  const CONFIG = {
+    // Endpoint propio en Vercel (api/ventas.js). Lee la hoja y la cachea.
+    dataUrl: "/api/ventas",
+    // Respaldo si el endpoint no existe (p. ej. abriendo el HTML en local).
+    fallbackCsvUrl:
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vRZhG16c6gNzf_76m8fnRuDOnFbYdnDDvr-9PnoEiQOVQLL30TvE44RYisrBVXTUeuZFXvD6Mtqt7ht/pub?output=csv",
+    timeZone: "America/Guayaquil", // define qué es "hoy"
+    locale: "en-US",               // formato $1,250.00, igual que la hoja
+    currency: "USD",
+    outlierFactor: 5,              // monto > 5× la mediana de su producto = atípico
+    topVendedores: 10,
+    pageSize: 15,
+    autoRefreshMin: 30,            // relee la hoja cada 30 min si la pestaña está abierta
+  };
+
+  /* ---------- Utilidades ---------- */
+  const $ = (sel) => document.querySelector(sel);
+  const esc = (s) =>
+    String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  const fmtMoney = new Intl.NumberFormat(CONFIG.locale, { style: "currency", currency: CONFIG.currency, maximumFractionDigits: 0 });
+  const fmtMoney2 = new Intl.NumberFormat(CONFIG.locale, { style: "currency", currency: CONFIG.currency, minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtCompact = new Intl.NumberFormat(CONFIG.locale, { style: "currency", currency: CONFIG.currency, notation: "compact", maximumFractionDigits: 1 });
+  const fmtInt = new Intl.NumberFormat(CONFIG.locale);
+  const fmtPct = new Intl.NumberFormat(CONFIG.locale, { style: "percent", maximumFractionDigits: 0 });
+  const fmtPct1 = new Intl.NumberFormat(CONFIG.locale, { style: "percent", maximumFractionDigits: 1, signDisplay: "exceptZero" });
+
+  const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  const MESES_LARGO = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+  const pad = (n) => String(n).padStart(2, "0");
+  const keyOf = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;
+  const fmtDate = (k) => { const [y, m, d] = k.split("-"); return `${+d}/${+m}/${y}`; };
+  const monthLabel = (mk, long = false) => {
+    const [y, m] = mk.split("-").map(Number);
+    return long ? `${MESES_LARGO[m - 1]} ${y}` : `${MESES[m - 1]} ${String(y).slice(2)}`;
+  };
+
+  function todayKey() {
+    // en-CA da YYYY-MM-DD
+    return new Intl.DateTimeFormat("en-CA", { timeZone: CONFIG.timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  }
+  function addDays(k, n) {
+    const [y, m, d] = k.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + n));
+    return keyOf(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+  }
+  function daysBetween(a, b) {
+    const [y1, m1, d1] = a.split("-").map(Number);
+    const [y2, m2, d2] = b.split("-").map(Number);
+    return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
+  }
+  function clampDay(y, m, d) {
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return keyOf(y, m, Math.min(d, last));
+  }
+
+  /* ---------- Parseo ---------- */
+  function parseCSV(text) {
+    const rows = [];
+    let row = [], field = "", inQ = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQ) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false;
+        } else field += c;
+      } else if (c === '"') inQ = true;
+      else if (c === ",") { row.push(field); field = ""; }
+      else if (c === "\n" || c === "\r") {
+        if (c === "\r" && text[i + 1] === "\n") i++;
+        row.push(field); rows.push(row); row = []; field = "";
+      } else field += c;
+    }
+    if (field !== "" || row.length) { row.push(field); rows.push(row); }
+    return rows.filter((r) => r.some((v) => v.trim() !== ""));
+  }
+
+  const norm = (s) => s.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const COLS = {
+    fecha: ["fecha", "date", "fecha venta", "fecha de venta"],
+    vendedor: ["vendedor", "asesor", "ejecutivo", "vendedora", "comercial"],
+    producto: ["producto", "item", "articulo", "sku"],
+    monto: ["monto", "valor", "venta", "total", "importe", "monto venta"],
+    region: ["region", "ciudad", "zona", "sucursal"],
+  };
+
+  function parseDate(s) {
+    s = (s || "").trim();
+    let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/); // d/m/aaaa (formato de la hoja)
+    let y, mo, d;
+    if (m) { d = +m[1]; mo = +m[2]; y = +m[3]; }
+    else if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+    else return null;
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    if (dt.getUTCMonth() !== mo - 1) return null; // 31/2 etc.
+    return keyOf(y, mo, d);
+  }
+
+  function parseMoney(s) {
+    let t = (s || "").replace(/[^\d.,\-]/g, "");
+    if (!t) return null;
+    const hasC = t.includes(","), hasD = t.includes(".");
+    if (hasC && hasD) {
+      if (t.lastIndexOf(",") > t.lastIndexOf(".")) t = t.replace(/\./g, "").replace(",", "."); // 1.250,00
+      else t = t.replace(/,/g, "");                                                          // 1,250.00
+    } else if (hasC) {
+      t = /^-?\d{1,3}(,\d{3})+$/.test(t) ? t.replace(/,/g, "") : t.replace(",", ".");
+    }
+    const v = Number(t);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  function median(arr) {
+    const a = [...arr].sort((x, y) => x - y);
+    const n = a.length;
+    return n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2;
+  }
+
+  function buildDataset(csvText) {
+    const table = parseCSV(csvText);
+    if (table.length < 2) throw new Error("La hoja no tiene filas de datos.");
+    const header = table[0].map(norm);
+    const idx = {};
+    for (const [key, aliases] of Object.entries(COLS)) {
+      idx[key] = header.findIndex((h) => aliases.includes(h));
+    }
+    const missing = Object.keys(COLS).filter((k) => idx[k] < 0);
+    if (missing.length) throw new Error(`Faltan columnas en la hoja: ${missing.join(", ")}. Encabezados leídos: ${table[0].join(" | ")}`);
+
+    const today = todayKey();
+    const rows = [];
+    const invalid = [];
+    table.slice(1).forEach((r, i) => {
+      const fecha = parseDate(r[idx.fecha]);
+      const monto = parseMoney(r[idx.monto]);
+      const rec = {
+        n: i + 2, // fila en la hoja
+        fecha,
+        vendedor: (r[idx.vendedor] || "").trim() || "(sin vendedor)",
+        producto: (r[idx.producto] || "").trim() || "(sin producto)",
+        region: (r[idx.region] || "").trim() || "(sin región)",
+        monto,
+        flags: [],
+      };
+      if (!fecha || monto === null) {
+        invalid.push({ ...rec, raw: r });
+        return;
+      }
+      rec.mes = fecha.slice(0, 7);
+      if (fecha > today) rec.flags.push("futuro");
+      rows.push(rec);
+    });
+
+    // Atípicos: monto muy por encima de lo normal para ese producto
+    const byProd = groupBy(rows, (r) => r.producto);
+    for (const list of byProd.values()) {
+      if (list.length < 3) continue;
+      const med = median(list.map((r) => r.monto));
+      for (const r of list) {
+        if (med > 0 && r.monto > CONFIG.outlierFactor * med) {
+          r.flags.push("atipico");
+          r.mediana = med;
+        }
+      }
+    }
+    return { rows, invalid, today };
+  }
+
+  function groupBy(arr, fn) {
+    const m = new Map();
+    for (const x of arr) {
+      const k = fn(x);
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(x);
+    }
+    return m;
+  }
+
+  /* ---------- Estado ---------- */
+  const state = {
+    data: null,
+    fetchedAt: null,
+    periodo: "ytd",
+    desde: "",
+    hasta: "",
+    region: "",
+    producto: "",
+    observados: false,
+    buscar: "",
+    sort: { key: "fecha", dir: "desc" },
+    shown: CONFIG.pageSize,
+    tableView: new Set(),
+    noticeOpen: false,
+  };
+
+  /* ---------- Períodos ---------- */
+  function currentRange() {
+    const t = state.data.today;
+    const [y, m, d] = t.split("-").map(Number);
+    switch (state.periodo) {
+      case "ytd": return { from: `${y}-01-01`, to: t, prev: { from: `${y - 1}-01-01`, to: clampDay(y - 1, m, d) }, label: `1 ene – ${d} ${MESES[m - 1]} ${y}` };
+      case "mes": {
+        const pm = m === 1 ? 12 : m - 1, py = m === 1 ? y - 1 : y;
+        return { from: keyOf(y, m, 1), to: t, prev: { from: keyOf(py, pm, 1), to: clampDay(py, pm, d) }, label: `${MESES_LARGO[m - 1]} ${y} (al ${d})` };
+      }
+      case "90d": {
+        const from = addDays(t, -89);
+        return { from, to: t, prev: { from: addDays(from, -90), to: addDays(from, -1) }, label: `Últimos 90 días (${fmtDate(from)} – ${fmtDate(t)})` };
+      }
+      case "custom": {
+        let from = state.desde || null, to = state.hasta || null;
+        if (from && to && from > to) [from, to] = [to, from];
+        let prev = null;
+        if (from && to) {
+          const len = daysBetween(from, to) + 1;
+          prev = { from: addDays(from, -len), to: addDays(from, -1) };
+        }
+        const label = `${from ? fmtDate(from) : "inicio"} – ${to ? fmtDate(to) : "fin"}`;
+        return { from, to, prev, label };
+      }
+      default: return { from: null, to: null, prev: null, label: "Todo el histórico" };
+    }
+  }
+
+  function filterRows(range) {
+    return state.data.rows.filter((r) => {
+      if (!state.observados && r.flags.length) return false;
+      if (state.region && r.region !== state.region) return false;
+      if (state.producto && r.producto !== state.producto) return false;
+      if (range && range.from && r.fecha < range.from) return false;
+      if (range && range.to && r.fecha > range.to) return false;
+      return true;
+    });
+  }
+
+  function summarize(rows) {
+    const total = rows.reduce((s, r) => s + r.monto, 0);
+    return { total, n: rows.length, ticket: rows.length ? total / rows.length : 0 };
+  }
+
+  function aggregate(rows, keyFn) {
+    const m = new Map();
+    for (const r of rows) {
+      const k = keyFn(r);
+      const a = m.get(k) || { key: k, total: 0, n: 0 };
+      a.total += r.monto; a.n += 1;
+      m.set(k, a);
+    }
+    return [...m.values()].sort((a, b) => b.total - a.total || a.key.localeCompare(b.key));
+  }
+
+  /* ---------- Render: KPIs ---------- */
+  const ICON_UP = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.5 10 8H2z" fill="currentColor"/></svg>';
+  const ICON_DOWN = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 9.5 2 4h8z" fill="currentColor"/></svg>';
+  const ICON_WARN = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5 18 17H2z" fill="#fab219" stroke="#7a5400" stroke-width="1" stroke-linejoin="round"/><path d="M10 8v4.2M10 14.4v.1" stroke="#3d2a00" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  const ICON_ERR = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 6v5M10 13.6v.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+
+  function deltaHTML(cur, prev, hasPrev) {
+    if (!hasPrev) return "";
+    if (!prev) return '<span>Sin período previo para comparar</span>';
+    const ch = (cur - prev) / prev;
+    const cls = Math.abs(ch) < 0.005 ? "flat" : ch > 0 ? "up" : "down";
+    const icon = cls === "up" ? ICON_UP : cls === "down" ? ICON_DOWN : "";
+    const word = cls === "up" ? "Sube" : cls === "down" ? "Baja" : "Igual";
+    return `<span class="delta ${cls}" title="${word} vs. período anterior">${icon}${fmtPct1.format(ch)}</span><span>vs. período anterior</span>`;
+  }
+
+  function renderKPIs(rows, range) {
+    const cur = summarize(rows);
+    const hasPrev = !!range.prev;
+    const prev = hasPrev ? summarize(filterRows(range.prev)) : null;
+    const regiones = aggregate(rows, (r) => r.region);
+    const lider = regiones[0];
+
+    const cards = [
+      { label: "Ventas totales", value: fmtMoney.format(cur.total), foot: deltaHTML(cur.total, prev && prev.total, hasPrev) || "&nbsp;" },
+      { label: "Transacciones", value: fmtInt.format(cur.n), foot: deltaHTML(cur.n, prev && prev.n, hasPrev) || "&nbsp;" },
+      { label: "Ticket promedio", value: fmtMoney2.format(cur.ticket), foot: deltaHTML(cur.ticket, prev && prev.ticket, hasPrev) || "&nbsp;" },
+      {
+        label: "Región líder",
+        value: lider ? esc(lider.key) : "—",
+        foot: lider && cur.total ? `${fmtPct.format(lider.total / cur.total)} de las ventas · ${fmtMoney.format(lider.total)}` : "&nbsp;",
+      },
+    ];
+    $("#kpis").innerHTML = cards
+      .map((c) => `<div class="kpi"><div class="kpi-label">${c.label}</div><div class="kpi-value">${c.value}</div><div class="kpi-foot">${c.foot}</div></div>`)
+      .join("");
+  }
+
+  /* ---------- Tooltip ---------- */
+  const tip = $("#tooltip");
+  function showTip(html, ev) {
+    tip.innerHTML = html;
+    tip.hidden = false;
+    moveTip(ev);
+  }
+  function moveTip(ev) {
+    if (tip.hidden) return;
+    const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+    let x = ev.clientX + pad, y = ev.clientY + pad;
+    if (x + w > window.innerWidth - 8) x = ev.clientX - w - pad;
+    if (y + h > window.innerHeight - 8) y = ev.clientY - h - pad;
+    tip.style.left = Math.max(8, x) + "px";
+    tip.style.top = Math.max(8, y) + "px";
+  }
+  const hideTip = () => { tip.hidden = true; };
+  const tipRows = (title, pairs) =>
+    `<div class="tt-title">${esc(title)}</div>` + pairs.map(([k, v]) => `<div class="tt-row"><span>${k}</span><b>${v}</b></div>`).join("");
+
+  function bindTips(container, selector, getHTML) {
+    container.querySelectorAll(selector).forEach((el) => {
+      el.addEventListener("mouseenter", (ev) => showTip(getHTML(el), ev));
+      el.addEventListener("mousemove", moveTip);
+      el.addEventListener("mouseleave", hideTip);
+      el.addEventListener("focus", () => {
+        const r = el.getBoundingClientRect();
+        showTip(getHTML(el), { clientX: r.left + r.width / 2, clientY: r.top });
+      });
+      el.addEventListener("blur", hideTip);
+    });
+  }
+
+  /* ---------- Render: ventas por mes (barras verticales SVG) ---------- */
+  function monthsBetween(fromMk, toMk) {
+    const out = [];
+    let [y, m] = fromMk.split("-").map(Number);
+    const [ty, tm] = toMk.split("-").map(Number);
+    while (y < ty || (y === ty && m <= tm)) {
+      out.push(`${y}-${pad(m)}`);
+      m++; if (m > 12) { m = 1; y++; }
+      if (out.length > 120) break;
+    }
+    return out;
+  }
+
+  function niceStep(raw) {
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    const f = raw / p;
+    return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+  }
+
+  function renderMonthly(rows, range) {
+    const el = $("#chart-mes");
+    $("#sub-mes").textContent = range.label;
+    const agg = new Map(aggregate(rows, (r) => r.mes).map((a) => [a.key, a]));
+    let fromMk = range.from ? range.from.slice(0, 7) : null;
+    let toMk = range.to ? range.to.slice(0, 7) : null;
+    const keys = [...agg.keys()].sort();
+    if (!fromMk) fromMk = keys[0];
+    if (!toMk) toMk = keys[keys.length - 1];
+    if (!rows.length || !fromMk) { el.innerHTML = '<div class="empty">Sin ventas para los filtros seleccionados.</div>'; return; }
+
+    const months = monthsBetween(fromMk, toMk).map((k) => agg.get(k) || { key: k, total: 0, n: 0 });
+
+    if (state.tableView.has("mes")) {
+      el.innerHTML = miniTable(["Mes", "Ventas", "Transacciones", "Ticket promedio"], months.map((a) => [
+        monthLabel(a.key, true), fmtMoney.format(a.total), fmtInt.format(a.n), a.n ? fmtMoney2.format(a.total / a.n) : "—",
+      ]), [fmtMoney.format(months.reduce((s, a) => s + a.total, 0)), fmtInt.format(months.reduce((s, a) => s + a.n, 0))]);
+      return;
+    }
+
+    const W = Math.max(280, el.clientWidth || 600);
+    const H = W < 500 ? 220 : 260;
+    const m = { t: 22, r: 4, b: 26, l: 52 };
+    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const max = Math.max(...months.map((a) => a.total), 1);
+    const step = niceStep(max / 4);
+    const top = Math.ceil(max / step) * step;
+    const y = (v) => m.t + ih - (v / top) * ih;
+    const band = iw / months.length;
+    const bw = Math.max(4, Math.min(56, band * 0.62));
+    const r = Math.min(4, bw / 2);
+
+    // Etiquetas selectivas: el máximo y el último mes con datos
+    const maxIdx = months.findIndex((a) => a.total === max);
+    let lastIdx = -1;
+    months.forEach((a, i) => { if (a.total > 0) lastIdx = i; });
+    const labelIdx = new Set([maxIdx, lastIdx]);
+    const everyN = Math.ceil(months.length / Math.max(1, Math.floor(iw / 44)));
+
+    let s = `<svg class="vbar-svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Ventas por mes">`;
+    for (let v = 0; v <= top + 1e-9; v += step) {
+      const yy = Math.round(y(v)) + 0.5;
+      if (v > 0) s += `<line class="gridline" x1="${m.l}" x2="${W - m.r}" y1="${yy}" y2="${yy}"/>`;
+      s += `<text class="tick" x="${m.l - 8}" y="${yy + 4}" text-anchor="end">${fmtCompact.format(v)}</text>`;
+    }
+    months.forEach((a, i) => {
+      const cx = m.l + band * i + band / 2;
+      const x0 = cx - bw / 2;
+      const yTop = y(a.total);
+      const h = m.t + ih - yTop;
+      s += `<g class="col" data-i="${i}" tabindex="0" aria-label="${monthLabel(a.key, true)}: ${fmtMoney.format(a.total)}">`;
+      s += `<rect class="hit-band" x="${m.l + band * i + 1}" y="${m.t}" width="${band - 2}" height="${ih}" rx="4"/>`;
+      if (h > 0.5) {
+        const rr = Math.min(r, h);
+        s += `<path class="bar" d="M${x0},${m.t + ih} V${yTop + rr} Q${x0},${yTop} ${x0 + rr},${yTop} H${x0 + bw - rr} Q${x0 + bw},${yTop} ${x0 + bw},${yTop + rr} V${m.t + ih} Z"/>`;
+      }
+      if (labelIdx.has(i) && a.total > 0) {
+        s += `<text class="bar-label" x="${cx}" y="${yTop - 6}" text-anchor="middle">${fmtCompact.format(a.total)}</text>`;
+      }
+      // Etiquetas del eje X: completas si caben, abreviadas (sin año) si no, y salteadas si aún así no caben
+      const short = band < 46;
+      const step = band >= 24 ? 1 : everyN;
+      if (i % step === 0) {
+        const lbl = short ? MESES[+a.key.slice(5) - 1] : monthLabel(a.key);
+        s += `<text class="tick" x="${cx}" y="${H - 8}" text-anchor="middle">${lbl}</text>`;
+      }
+      s += `<rect class="hit" x="${m.l + band * i}" y="${m.t}" width="${band}" height="${ih + m.b}"/>`;
+      s += `</g>`;
+    });
+    s += `<line class="baseline" x1="${m.l}" x2="${W - m.r}" y1="${m.t + ih + 0.5}" y2="${m.t + ih + 0.5}"/>`;
+    s += `</svg>`;
+    el.innerHTML = s;
+
+    const svg = el.querySelector("svg");
+    svg.addEventListener("mouseenter", () => svg.classList.add("has-hover"));
+    svg.addEventListener("mouseleave", () => svg.classList.remove("has-hover"));
+    bindTips(el, "g.col", (g) => {
+      const a = months[+g.dataset.i];
+      return tipRows(monthLabel(a.key, true), [
+        ["Ventas", fmtMoney.format(a.total)],
+        ["Transacciones", fmtInt.format(a.n)],
+        ["Ticket promedio", a.n ? fmtMoney2.format(a.total / a.n) : "—"],
+      ]);
+    });
+  }
+
+  /* ---------- Render: barras horizontales (región, producto, vendedor) ---------- */
+  function renderHBars(elId, tableKey, items, total, opts = {}) {
+    const el = $(elId);
+    if (!items.length) { el.innerHTML = '<div class="empty">Sin ventas para los filtros seleccionados.</div>'; return; }
+    const shownItems = opts.limit ? items.slice(0, opts.limit) : items;
+
+    if (state.tableView.has(tableKey)) {
+      el.innerHTML = miniTable([opts.title, "Ventas", "Particip.", "Transacc.", "Ticket prom."], items.map((a) => [
+        a.key, fmtMoney.format(a.total), fmtPct.format(total ? a.total / total : 0), fmtInt.format(a.n), fmtMoney2.format(a.total / a.n),
+      ]), [fmtMoney.format(total), "100%", fmtInt.format(items.reduce((s, a) => s + a.n, 0))]);
+      return;
+    }
+
+    const max = shownItems[0].total || 1;
+    el.innerHTML = `<div class="hbars">${shownItems
+      .map((a, i) => `
+        <div class="hbar-row" data-i="${i}" tabindex="0">
+          <div class="hbar-name" title="${esc(a.key)}">${opts.rank ? `<span class="hbar-rank">${i + 1}</span>` : ""}${esc(a.key)}</div>
+          <div class="hbar-track"><div class="hbar-fill" style="width:${((a.total / max) * 100).toFixed(2)}%"></div></div>
+          <div class="hbar-val"><b>${fmtMoney.format(a.total)}</b><span class="share">${fmtPct.format(total ? a.total / total : 0)}</span></div>
+        </div>`)
+      .join("")}</div>`;
+    bindTips(el, ".hbar-row", (row) => {
+      const a = shownItems[+row.dataset.i];
+      return tipRows(a.key, [
+        ["Ventas", fmtMoney.format(a.total)],
+        ["Participación", fmtPct.format(total ? a.total / total : 0)],
+        ["Transacciones", fmtInt.format(a.n)],
+        ["Ticket promedio", fmtMoney2.format(a.total / a.n)],
+      ]);
+    });
+  }
+
+  function miniTable(headers, rows, foot) {
+    const head = headers.map((h, i) => `<th class="${i ? "num" : ""}">${h}</th>`).join("");
+    const body = rows.map((r) => `<tr>${r.map((v, i) => `<td class="${i ? "num" : ""}">${esc(v)}</td>`).join("")}</tr>`).join("");
+    const ft = foot ? `<tfoot><tr><td>Total</td>${foot.map((v) => `<td class="num">${esc(v)}</td>`).join("")}${"<td></td>".repeat(Math.max(0, headers.length - 1 - foot.length))}</tr></tfoot>` : "";
+    return `<div class="table-wrap"><table class="data"><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${ft}</table></div>`;
+  }
+
+  /* ---------- Render: detalle ---------- */
+  const FLAG_LABEL = { futuro: "Fecha futura", atipico: "Monto atípico" };
+
+  function detailRows(rows) {
+    const q = norm(state.buscar);
+    let out = q
+      ? rows.filter((r) => norm(`${r.vendedor} ${r.producto} ${r.region} ${fmtDate(r.fecha)}`).includes(q))
+      : rows.slice();
+    const { key, dir } = state.sort;
+    const mul = dir === "asc" ? 1 : -1;
+    out.sort((a, b) => {
+      const va = a[key], vb = b[key];
+      const c = typeof va === "number" ? va - vb : String(va).localeCompare(String(vb), "es");
+      return c * mul || (b.fecha > a.fecha ? 1 : -1);
+    });
+    return out;
+  }
+
+  function renderDetail(rows) {
+    const list = detailRows(rows);
+    const total = list.reduce((s, r) => s + r.monto, 0);
+    $("#sub-detalle").textContent = `${fmtInt.format(list.length)} transacciones · ${fmtMoney2.format(total)}`;
+    const tbody = $("#tabla-detalle tbody");
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">Sin resultados.</td></tr>';
+      $("#btn-mas").hidden = true;
+      return;
+    }
+    tbody.innerHTML = list
+      .slice(0, state.shown)
+      .map((r) => `<tr class="${r.flags.length ? "is-flagged" : ""}">
+        <td class="tnum">${fmtDate(r.fecha)}</td>
+        <td>${esc(r.vendedor)}</td>
+        <td>${esc(r.producto)}</td>
+        <td>${esc(r.region)}</td>
+        <td class="num">${fmtMoney2.format(r.monto)}</td>
+        <td>${r.flags.length ? r.flags.map((f) => `<span class="badge">${ICON_WARN}${FLAG_LABEL[f]}</span>`).join(" ") : '<span class="badge badge-ok">OK</span>'}</td>
+      </tr>`)
+      .join("");
+    const btn = $("#btn-mas");
+    btn.hidden = list.length <= state.shown;
+    btn.textContent = `Mostrar más (${fmtInt.format(list.length - state.shown)} restantes)`;
+    document.querySelectorAll("#tabla-detalle th[data-sort]").forEach((th) => {
+      th.tabIndex = 0;
+      th.setAttribute("aria-sort", th.dataset.sort === state.sort.key ? (state.sort.dir === "asc" ? "ascending" : "descending") : "none");
+    });
+  }
+
+  /* ---------- Render: aviso de calidad de datos ---------- */
+  function renderNotice() {
+    const { rows, invalid } = state.data;
+    const flagged = rows.filter((r) => r.flags.length);
+    const nAtip = flagged.filter((r) => r.flags.includes("atipico")).length;
+    const nFut = flagged.filter((r) => r.flags.includes("futuro")).length;
+    const el = $("#notice");
+    if (!flagged.length && !invalid.length) { el.hidden = true; return; }
+
+    const parts = [];
+    if (nFut) parts.push(`${nFut} con fecha posterior a hoy`);
+    if (nAtip) parts.push(`${nAtip} con monto atípico`);
+    const nAmbos = nAtip + nFut - flagged.length;
+    if (nAmbos > 0) parts[parts.length - 1] += `, ${nAmbos === nAtip ? (nAtip > 1 ? "ambos" : "también") + " con fecha futura" : `${nAmbos} con las dos observaciones`}`;
+    let msg = "";
+    if (flagged.length) {
+      msg += `<b>${flagged.length} registro${flagged.length > 1 ? "s" : ""} observado${flagged.length > 1 ? "s" : ""}</b> en la hoja (${parts.join(", ")}). `;
+      msg += state.observados ? "Están <b>incluidos</b> en las cifras." : "Están <b>excluidos</b> de las cifras.";
+    }
+    if (invalid.length) msg += ` ${invalid.length} fila${invalid.length > 1 ? "s" : ""} no se pudo leer (fecha o monto inválido) y no se cuenta.`;
+
+    let detail = "";
+    if (state.noticeOpen) {
+      const all = [
+        ...flagged.map((r) => [`Fila ${r.n}`, fmtDate(r.fecha), r.vendedor, r.producto, r.region, fmtMoney2.format(r.monto),
+          r.flags.map((f) => f === "atipico" ? `Monto atípico (mediana ${r.producto}: ${fmtMoney2.format(r.mediana)})` : "Fecha futura").join(" · ")]),
+        ...invalid.map((r) => [`Fila ${r.n}`, (r.raw || []).join(" | "), "", "", "", "", "No se pudo leer"]),
+      ];
+      detail = `<div class="table-wrap" style="margin-top:10px"><table class="data"><thead><tr><th>Fila</th><th>Fecha</th><th>Vendedor</th><th>Producto</th><th>Región</th><th class="num">Monto</th><th>Motivo</th></tr></thead><tbody>${all
+        .map((r) => `<tr>${r.map((v, i) => `<td class="${i === 5 ? "num" : ""}">${esc(v)}</td>`).join("")}</tr>`)
+        .join("")}</tbody></table></div>`;
+    }
+    el.innerHTML = `${ICON_WARN}<div style="min-width:0;flex:1">${msg} <button class="link-btn" id="btn-notice" type="button">${state.noticeOpen ? "Ocultar detalle" : "Revisar registros"}</button>${detail}</div>`;
+    el.hidden = false;
+    $("#btn-notice").onclick = () => { state.noticeOpen = !state.noticeOpen; renderNotice(); };
+  }
+
+  /* ---------- Render principal ---------- */
+  let lastFiltered = [];
+  function render() {
+    if (!state.data) return;
+    const range = currentRange();
+    const rows = filterRows(range);
+    lastFiltered = rows;
+    const total = rows.reduce((s, r) => s + r.monto, 0);
+
+    renderKPIs(rows, range);
+    renderMonthly(rows, range);
+    renderHBars("#chart-region", "region", aggregate(rows, (r) => r.region), total, { title: "Región" });
+    renderHBars("#chart-producto", "producto", aggregate(rows, (r) => r.producto), total, { title: "Producto" });
+    const vend = aggregate(rows, (r) => r.vendedor);
+    $("#sub-vendedores").textContent = vend.length > CONFIG.topVendedores
+      ? `Top ${CONFIG.topVendedores} de ${vend.length} vendedores por monto vendido`
+      : `${vend.length} vendedor${vend.length === 1 ? "" : "es"} por monto vendido`;
+    renderHBars("#chart-vendedor", "vendedor", vend, total, { title: "Vendedor", rank: true, limit: CONFIG.topVendedores });
+    renderDetail(rows);
+    renderNotice();
+  }
+
+  function populateFilters() {
+    const fill = (sel, values, allLabel) => {
+      const cur = sel.value;
+      sel.innerHTML = `<option value="">${allLabel}</option>` + values.map((v) => `<option>${esc(v)}</option>`).join("");
+      sel.value = values.includes(cur) ? cur : "";
+    };
+    const uniq = (fn) => [...new Set(state.data.rows.map(fn))].sort((a, b) => a.localeCompare(b, "es"));
+    fill($("#f-region"), uniq((r) => r.region), "Todas");
+    fill($("#f-producto"), uniq((r) => r.producto), "Todos");
+    state.region = $("#f-region").value;
+    state.producto = $("#f-producto").value;
+  }
+
+  function renderMeta() {
+    const d = state.fetchedAt || new Date();
+    const when = new Intl.DateTimeFormat("es-EC", { timeZone: CONFIG.timeZone, day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(d);
+    $("#meta").textContent = `Datos leídos: ${when} · ${fmtInt.format(state.data.rows.length + state.data.invalid.length)} registros en la hoja`;
+  }
+
+  /* ---------- Carga de datos ---------- */
+  async function fetchCSV() {
+    if (typeof window.__VENTAS_CSV__ === "string") return { text: window.__VENTAS_CSV__, at: new Date() };
+    try {
+      const res = await fetch(CONFIG.dataUrl, { cache: "no-cache" });
+      const ct = res.headers.get("content-type") || "";
+      if (!res.ok || !ct.includes("csv")) {
+        let msg = `El servidor respondió ${res.status}`;
+        try { const j = await res.json(); if (j.error) msg = j.error; } catch (_) {}
+        throw new Error(msg);
+      }
+      const at = res.headers.get("x-fetched-at");
+      return { text: await res.text(), at: at ? new Date(at) : new Date() };
+    } catch (err) {
+      // Respaldo directo a Google (útil en local sin el endpoint de Vercel)
+      const res = await fetch(CONFIG.fallbackCsvUrl, { cache: "no-cache" });
+      if (!res.ok) throw err;
+      return { text: await res.text(), at: new Date() };
+    }
+  }
+
+  async function load({ silent = false } = {}) {
+    const btn = $("#btn-refresh");
+    btn.classList.add("is-loading");
+    btn.disabled = true;
+    if (!silent && !state.data) {
+      ["#chart-mes", "#chart-region", "#chart-producto", "#chart-vendedor"].forEach((s) => ($(s).innerHTML = '<div class="skeleton"></div>'));
+    }
+    try {
+      const { text, at } = await fetchCSV();
+      state.data = buildDataset(text);
+      state.fetchedAt = at;
+      $("#error").hidden = true;
+      populateFilters();
+      renderMeta();
+      render();
+    } catch (err) {
+      const el = $("#error");
+      el.innerHTML = `${ICON_ERR}<div><b>No se pudieron cargar los datos.</b> ${esc(err.message || err)}${state.data ? " Se muestra la última versión cargada." : " Verifica que la hoja siga publicada como CSV."}</div>`;
+      el.hidden = false;
+      if (!state.data) $("#meta").textContent = "Sin datos";
+    } finally {
+      btn.classList.remove("is-loading");
+      btn.disabled = false;
+    }
+  }
+
+  /* ---------- Exportar CSV ---------- */
+  function downloadCSV() {
+    const list = detailRows(lastFiltered);
+    const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+    const lines = [["Fecha", "Vendedor", "Producto", "Región", "Monto", "Estado"].join(",")];
+    for (const r of list) {
+      lines.push([fmtDate(r.fecha), q(r.vendedor), q(r.producto), q(r.region), r.monto.toFixed(2), q(r.flags.map((f) => FLAG_LABEL[f]).join(" / ") || "OK")].join(","));
+    }
+    const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `ventas_${todayKey()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  /* ---------- Tema ---------- */
+  function initTheme() {
+    let saved = null;
+    try { saved = localStorage.getItem("dash-theme"); } catch (_) {}
+    if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+    $("#btn-theme").addEventListener("click", () => {
+      const isDark = document.documentElement.dataset.theme
+        ? document.documentElement.dataset.theme === "dark"
+        : window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const next = isDark ? "light" : "dark";
+      document.documentElement.dataset.theme = next;
+      try { localStorage.setItem("dash-theme", next); } catch (_) {}
+    });
+  }
+
+  /* ---------- Eventos ---------- */
+  function bind() {
+    const resetPage = () => { state.shown = CONFIG.pageSize; };
+    $("#f-periodo").addEventListener("change", (e) => {
+      state.periodo = e.target.value;
+      const custom = state.periodo === "custom";
+      $("#wrap-desde").hidden = !custom;
+      $("#wrap-hasta").hidden = !custom;
+      if (custom && !state.desde && state.data) {
+        state.desde = state.data.today.slice(0, 4) + "-01-01";
+        state.hasta = state.data.today;
+        $("#f-desde").value = state.desde;
+        $("#f-hasta").value = state.hasta;
+      }
+      resetPage(); render();
+    });
+    $("#f-desde").addEventListener("change", (e) => { state.desde = e.target.value; resetPage(); render(); });
+    $("#f-hasta").addEventListener("change", (e) => { state.hasta = e.target.value; resetPage(); render(); });
+    $("#f-region").addEventListener("change", (e) => { state.region = e.target.value; resetPage(); render(); });
+    $("#f-producto").addEventListener("change", (e) => { state.producto = e.target.value; resetPage(); render(); });
+    $("#f-observados").addEventListener("change", (e) => { state.observados = e.target.checked; resetPage(); render(); });
+    $("#f-buscar").addEventListener("input", (e) => { state.buscar = e.target.value; resetPage(); renderDetail(lastFiltered); });
+    $("#btn-mas").addEventListener("click", () => { state.shown += CONFIG.pageSize * 2; renderDetail(lastFiltered); });
+    $("#btn-csv").addEventListener("click", downloadCSV);
+    $("#btn-refresh").addEventListener("click", () => load({ silent: true }));
+
+    document.querySelectorAll("#tabla-detalle th[data-sort]").forEach((th) => {
+      const go = () => {
+        const k = th.dataset.sort;
+        state.sort = state.sort.key === k
+          ? { key: k, dir: state.sort.dir === "asc" ? "desc" : "asc" }
+          : { key: k, dir: k === "monto" || k === "fecha" ? "desc" : "asc" };
+        renderDetail(lastFiltered);
+      };
+      th.addEventListener("click", go);
+      th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+    });
+
+    document.querySelectorAll("[data-toggle-table]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const k = btn.dataset.toggleTable;
+        if (state.tableView.has(k)) state.tableView.delete(k); else state.tableView.add(k);
+        btn.textContent = state.tableView.has(k) ? "Ver gráfico" : "Ver tabla";
+        render();
+      });
+    });
+
+    let rt, lastW = 0;
+    new ResizeObserver((entries) => {
+      const w = Math.round(entries[0].contentRect.width);
+      if (w === lastW) return; // solo re-dibuja si cambia el ancho
+      lastW = w;
+      clearTimeout(rt);
+      rt = setTimeout(() => { if (state.data) renderMonthly(lastFiltered, currentRange()); }, 120);
+    }).observe($("#chart-mes"));
+    window.addEventListener("scroll", hideTip, { passive: true });
+
+    if (CONFIG.autoRefreshMin > 0) {
+      setInterval(() => { if (document.visibilityState === "visible") load({ silent: true }); }, CONFIG.autoRefreshMin * 60000);
+    }
+  }
+
+  initTheme();
+  bind();
+  load();
+})();
+</script>
+</body>
+</html>
